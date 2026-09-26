@@ -7,14 +7,16 @@ compatibility_flags = ["nodejs_compat"]
 # Deploy: wrangler deploy
 # Frontend (index.html etc.) -> deploy separately to Pages: wrangler pages deploy . --project-name terragrow
 
-[[r2_buckets]]
-binding = "IMAGES"
-bucket_name = "terragrow-images"
+# TEMPORARILY DISABLED — R2 is not enabled on this account yet (Dashboard -> R2 -> Enable).
+# After enabling: uncomment, run `wrangler r2 bucket create terragrow-images`, redeploy.
+# [[r2_buckets]]
+# binding = "IMAGES"
+# bucket_name = "terragrow-images"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "terragrow-db"
-database_id = "REPLACE_WITH_WRANGLER_D1_ID"
+database_id = "293063a3-da6b-4ece-9f02-869830e9f103"
 
 # Optional KV cache (season lookups, sessions, rate limits):
 # [[kv_namespaces]]
