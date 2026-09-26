@@ -1,0 +1,35 @@
+name = "terragrow-api"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Local dev: wrangler dev --local
+# Deploy: wrangler deploy
+# Frontend (index.html etc.) -> deploy separately to Pages: wrangler pages deploy . --project-name terragrow
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "terragrow-images"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "terragrow-db"
+database_id = "REPLACE_WITH_WRANGLER_D1_ID"
+
+# Optional KV cache (season lookups, sessions, rate limits):
+# [[kv_namespaces]]
+# binding = "CACHE"
+# id = "REPLACE_WITH_KV_ID"
+
+[triggers]
+crons = ["0 6 * * 1"]  # Phase 1: weekly Monday 06:00 UTC -> ingest + analyze
+
+[vars]
+EXTERNAL_MODEL_URL = ""   # Phase 3: GPU inference endpoint, e.g. "https://xxx.runpod.net/segment"
+SENTINEL_HUB_URL = ""     # Phase 1: satellite feed base URL (optional)
+NOTIFY_WEBHOOK_URL = ""   # Phase 5: alert webhook (Slack/n8n/Twilio-proxy). "" = dispatch skipped.
+
+# Secrets (never commit — set via CLI):
+#   wrangler secret put MODEL_API_KEY      # Bearer for EXTERNAL_MODEL_URL
+#   wrangler secret put NOTIFY_API_KEY     # Bearer for NOTIFY_WEBHOOK_URL
+#   wrangler secret put SENTINEL_HUB_KEY   # satellite provider key

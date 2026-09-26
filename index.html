@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TerraGrow — Geo-Spatial Land Analysis</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="nav">
+  <div class="brand">
+    <div class="logo">🌱</div>
+    <div>
+      <div class="brand-name"><span class="green">Terra</span><span class="brown">Grow</span></div>
+      <div class="brand-sub">Geo-Spatial Farmland Intelligence</div>
+    </div>
+  </div>
+  <div class="nav-links">
+    <span class="pill" id="backendStatus">● frontend-only mode</span>
+    <button class="btn ghost" id="loadSamplesBtn">Load sample tiles</button>
+    <button class="btn primary" onclick="document.getElementById('fileInput').click()">Upload Images</button>
+  </div>
+</header>
+
+<main class="container">
+  <section class="hero">
+    <div>
+      <h1>Upload satellite imagery.<br/>Get <span class="green">Farm</span> / <span class="tan">Barren</span> / <span class="gray">City</span> / <span class="blue">Water</span> breakdown.</h1>
+      <p>TerraGrow segments every pixel into 4 classes and returns percentage coverage. Works 100% in-browser. Optionally connect the Python backend for batch + your trained model.</p>
+      <div class="hero-actions">
+        <button class="btn primary big" onclick="document.getElementById('fileInput').click()">📤 Upload image(s)</button>
+        <button class="btn secondary big" id="analyzeBtn">⚙ Analyze all</button>
+        <button class="btn ghost" id="clearBtn">Clear</button>
+      </div>
+      <div class="backend-row">
+        <label class="switch"><input type="checkbox" id="useBackend" /> <span>Use Python backend if running</span></label>
+        <input id="backendUrl" value="http://127.0.0.1:5000/api/analyze" />
+        <button class="btn small" id="checkBackend">Test</button>
+      </div>
+    </div>
+    <div class="stats-card">
+      <h3>Aggregate coverage</h3>
+      <canvas id="donut" height="200"></canvas>
+      <div class="legend">
+        <div><i class="dot farm"></i>Farmland <b id="pctFarm">—</b></div>
+        <div><i class="dot barren"></i>Barren <b id="pctBarren">—</b></div>
+        <div><i class="dot city"></i>City / Urban <b id="pctCity">—</b></div>
+        <div><i class="dot water"></i>Water <b id="pctWater">—</b></div>
+      </div>
+      <div class="totals"><span id="imgCount">0 images</span> · <span id="pixCount">0 px</span></div>
+      <div class="export-row">
+        <button class="btn small" id="csvBtn">⬇ CSV</button>
+        <button class="btn small" id="reportBtn">⬇ Report</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="drop" id="dropzone">
+    <input type="file" id="fileInput" accept="image/*" multiple hidden />
+    <p class="drop-title">Drag & drop satellite / drone images here</p>
+    <p class="drop-sub">or click Upload. Supports PNG / JPG / TIFF-converted. Multiple files = averaged + per-image table.</p>
+    <div class="class-chips">
+      <span class="chip farm">Farm = greens</span>
+      <span class="chip barren">Barren = browns / tan</span>
+      <span class="chip city">City = gray / white / rooftops</span>
+      <span class="chip water">Water = blue / teal</span>
+    </div>
+  </section>
+
+  <section id="results" class="grid"></section>
+
+  <section class="how" id="farmDash">
+    <h2>Farm dashboard <span class="note">· Cloudflare Worker API (Phase 2/4)</span></h2>
+    <div class="backend-row" style="margin-bottom:10px">
+      <span class="pill" id="cfStatus">● cloud not tested</span>
+      <input id="cfWorkerUrl" value="http://127.0.0.1:8788" title="Worker URL (wrangler dev or deployed)" />
+      <button class="btn small" id="cfTestBtn">Test</button>
+    </div>
+    <div class="how-grid">
+      <div class="how-card">
+        <b>1. Register plot</b>
+        <div class="farm-row"><input id="farmName" placeholder="Plot name (e.g. North field)" /></div>
+        <div class="farm-row">
+          <select id="farmSoil">
+            <option value="loam">loam</option><option value="clay">clay</option>
+            <option value="sandy-loam">sandy-loam</option><option value="black">black</option>
+          </select>
+          <input id="farmLat" type="number" step="0.0001" value="28.6139" title="Latitude" />
+          <input id="farmLng" type="number" step="0.0001" value="77.2090" title="Longitude" />
+        </div>
+        <button class="btn small" id="farmCreateBtn">＋ Create farm</button>
+      </div>
+      <div class="how-card">
+        <b>2. Advise &amp; monitor</b>
+        <div class="farm-row"><select id="farmSelect"><option value="">— select farm —</option></select>
+        <button class="btn small" id="farmRefreshBtn">Refresh</button></div>
+        <div class="farm-row">
+          <button class="btn small" id="farmImageryBtn">Imagery</button>
+          <button class="btn small" id="farmRecommendBtn">Recommend</button>
+          <button class="btn small" id="farmMonitorBtn">Monitor</button>
+          <button class="btn small" id="farmAlertsBtn">Alerts</button>
+        </div>
+        <div class="farm-row"><button class="btn small" id="cfSaveBtn">⬆ Save current analysis to cloud</button></div>
+      </div>
+      <div class="how-card">
+        <b>3. Cloud history</b>
+        <div class="farm-row">
+          <button class="btn small" id="cfHistoryBtn">History</button>
+          <button class="btn small" id="cfStatsBtn">Cloud stats</button>
+        </div>
+        <p class="note" id="cfStatsLine">No cloud data loaded yet.</p>
+      </div>
+    </div>
+    <pre id="farmOut" class="farm-out">Connect a Worker (Test ↑) then create/select a farm.</pre>
+  </section>
+
+  <section class="how">
+    <h2>How analysis works</h2>
+    <div class="how-grid">
+      <div class="how-card"><b>1. Upload</b><p>Images stay in your browser. Canvas downsamples to max 512px for speed.</p></div>
+      <div class="how-card"><b>2. Segment</b><p>Each pixel → Farmland / Barren / City / Water by calibrated color rules that mimic your trained CV model. Swap in your real model in <code>app.py</code> → <code>MODEL_PATH</code>.</p></div>
+      <div class="how-card"><b>3. Report</b><p>Percentages, masked overlay, confidence note, CSV export for GIS records.</p></div>
+    </div>
+    <p class="note">To use your trained model: place <code>model.onnx</code> / <code>model.h5</code> next to <code>app.py</code> and set <code>USE_TRAINED_MODEL = True</code>. API returns identical JSON so the frontend needs no changes.</p>
+  </section>
+</main>
+
+<footer>TerraGrow · farmland · barren · urban · water · built for geospatial advisory</footer>
+<script src="analyzer.js"></script>
+</body>
+</html>

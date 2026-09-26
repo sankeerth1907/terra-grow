@@ -1,0 +1,15 @@
+node_modules/
+.wrangler/
+.dev.vars
+.wrangler-state/
+*.log
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.DS_Store
+Thumbs.db
+model.onnx
+model.h5
+model.pt
