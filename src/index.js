@@ -338,6 +338,19 @@ export default {
     };
 
     try {
+      // ===== landing page (so the workers.dev URL loads a real page) =====
+      if (pathname === "/" && request.method === "GET") {
+        return new Response(
+          `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>TerraGrow API</title></head>` +
+          `<body style="font-family:system-ui;background:#f2f0e8;color:#22301f;max-width:640px;margin:40px auto;padding:0 20px">` +
+          `<h1><span style="color:#1e5b2e">Terra</span><span style="color:#6b4a2f">Grow</span> API</h1>` +
+          `<p>Geo-spatial land analysis: Farmland / Barren / City / Water.</p>` +
+          `<p><a href="https://terragrow.pages.dev">Open the TerraGrow website</a></p>` +
+          `<p><a href="/api/health">API health</a> · <a href="/api/stats">Cloud stats</a></p>` +
+          `<p style="color:#6b7563;font-size:13px">Full route map in <code>README.md</code> of sankeerth1907/terra-grow.</p></body></html>`,
+          { headers: cors({ "Content-Type": "text/html;charset=utf-8" }) }
+        );
+      }
       // ===== health =====
       if (pathname === "/api/health" && request.method === "GET") {
         return json({ ok: true, time: nowIso(), hasR2: !!env.IMAGES, hasD1: !!env.DB, model: String(env.EXTERNAL_MODEL_URL || "").trim() ? "external" : "heuristic", phases: ["phase1-ingest", "phase2-core-apis", "phase3-cv-integration"] });
