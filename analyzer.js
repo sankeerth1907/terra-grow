@@ -14,6 +14,7 @@ $('csvBtn').onclick=exportCSV;
 $('reportBtn').onclick=exportReport;
 $('checkBackend').onclick=testBackend;
 $('loadSamplesBtn').onclick=loadSamples;
+if ($('gsdInput')) $('gsdInput').addEventListener('input', () => render());
 
 function addFiles(files){
   [...files].filter(f=>f.type.startsWith('image/')).forEach(f=>{
@@ -121,6 +122,20 @@ async function testBackend(){
   }catch(e){ $('backendStatus').textContent='● backend unreachable — run: python app.py'; }
 }
 
+// ---- area + underutilised (Geo shared lib, geo.js) ----
+const gsd = () => Math.max(0, parseFloat(($('gsdInput') || {}).value) || 0);
+function detailsOf(r) {
+  return Geo.detailsFor(r.pct, { origW: r.width, origH: r.height, analyzedPx: r.total, counts: r.counts, gsdM: gsd(), engine: r.engine });
+}
+function detailsHtml(r) {
+  const d = detailsOf(r);
+  const L = (k, name) => `${name} <b>${r.pct[k]}%</b> · ${d.perClass[k].ha} ha`;
+  return `<div>${r.width}×${r.height} px original · ${r.total.toLocaleString()} px analyzed · <b>${d.totalHa} ha</b> total (${d.totalAcres} ac)</div>` +
+    `<div>${L('farm', 'Farm')} &nbsp;|&nbsp; ${L('barren', 'Barren')} &nbsp;|&nbsp; ${L('city', 'City')} &nbsp;|&nbsp; ${L('water', 'Water')}</div>` +
+    `<div>Underutilised <b>${d.underPct}% (~${d.underHa} ha)</b> · Cultivation score <b>${d.score}/100</b> · Water <b>${d.waterStatus}</b> · NDVI ~<b>${d.ndvi}</b></div>` +
+    `<div style="color:#445">${d.advice}</div>`;
+}
+
 // ---- rendering ----
 function render(){
   const box=$('results'); box.innerHTML='';
@@ -140,13 +155,16 @@ function render(){
           ${bar('City',r.pct.city,'#9aa0a6')}${bar('Water',r.pct.water,'#2d9cdb')}
         </div>
         <div class="verdict">${it.verdict||''}<div style="color:#888;margin-top:4px">${r.total.toLocaleString()} px analyzed${r.engine?' · '+r.engine:' · in-browser'}</div></div>
+        <div class="details">${detailsHtml(r)}</div>
         `:`<p style="font-size:13px;color:#777">Press “Analyze all”.</p>`}
       </div>`;
     box.appendChild(card);
   });
   // aggregate
-  const agg={farm:0,barren:0,city:0,water:0}; let tot=0,n=0;
-  state.items.forEach(it=>{ if(it.result){for(const k in agg)agg[k]+=it.result.counts[k]; tot+=it.result.total; n++;}});
+  const agg={farm:0,barren:0,city:0,water:0}; let tot=0,n=0,totHa=0,underHa=0;
+  state.items.forEach(it=>{ if(it.result){for(const k in agg)agg[k]+=it.result.counts[k]; tot+=it.result.total; n++;
+    const d=detailsOf(it.result); totHa+=d.totalHa; underHa+=d.underHa;}});
+  totHa=+totHa.toFixed(2); underHa=+underHa.toFixed(2);
   let pct={farm:0,barren:0,city:0,water:0};
   if(tot) for(const k in agg) pct[k]=+(agg[k]/tot*100).toFixed(2);
   $('pctFarm').textContent=tot?pct.farm+'%':'—';
@@ -155,8 +173,9 @@ function render(){
   $('pctWater').textContent=tot?pct.water+'%':'—';
   $('imgCount').textContent=n+' / '+state.items.length+' analyzed';
   $('pixCount').textContent=tot.toLocaleString()+' px';
+  $('haCount').textContent=tot?(totHa+' ha · '+underHa+' ha underutilised'):'— ha';
   drawDonut(tot?[pct.farm,pct.barren,pct.city,pct.water]:[0,0,0,0]);
-  state.agg={pct,tot};
+  state.agg={pct,tot,totHa,underHa};
 }
 const bar=(l,v,c)=>`<div class="bar-row"><span>${l}</span><div class="bar"><i style="width:${v}%;background:${c}"></i></div><b>${v}%</b></div>`;
 
@@ -188,14 +207,17 @@ async function loadSamples(){
 }
 
 function exportCSV(){
-  const rows=[['image','farmland_%','barren_%','city_%','water_%','pixels']];
-  state.items.forEach(it=>{ if(it.result) rows.push([it.name,it.result.pct.farm,it.result.pct.barren,it.result.pct.city,it.result.pct.water,it.result.total]); });
-  if(state.agg) rows.push(['AGGREGATE',state.agg.pct.farm,state.agg.pct.barren,state.agg.pct.city,state.agg.pct.water,state.agg.tot]);
+  const rows=[['image','farmland_%','barren_%','city_%','water_%','pixels','width','height','gsd_m_px','total_ha','farm_ha','barren_ha','city_ha','water_ha','underutilised_ha','underutilised_%','cultivation_score','water_status']];
+  state.items.forEach(it=>{ if(it.result){ const d=detailsOf(it.result);
+    rows.push([it.name,it.result.pct.farm,it.result.pct.barren,it.result.pct.city,it.result.pct.water,it.result.total,it.result.width,it.result.height,gsd(),d.totalHa,d.perClass.farm.ha,d.perClass.barren.ha,d.perClass.city.ha,d.perClass.water.ha,d.underHa,d.underPct,d.score,d.waterStatus]); }});
+  if(state.agg) rows.push(['AGGREGATE',state.agg.pct.farm,state.agg.pct.barren,state.agg.pct.city,state.agg.pct.water,state.agg.tot,'','',gsd(),state.agg.totHa,'','','', '',state.agg.underHa,'','','']);
   dl('terragrow-results.csv',rows.map(r=>r.join(',')).join('\n'),'text/csv');
 }
 function exportReport(){
   const a=state.agg; if(!a||!a.tot){alert('Analyze first.');return;}
-  const txt=`TerraGrow Land-Cover Report\n${new Date().toLocaleString()}\n\nAggregate: Farmland ${a.pct.farm}% | Barren ${a.pct.barren}% | City ${a.pct.city}% | Water ${a.pct.water}%\nPixels: ${a.tot}\n\nPer image:\n`+state.items.map(it=>it.result?`- ${it.name}: farm ${it.result.pct.farm}%, barren ${it.result.pct.barren}%, city ${it.result.pct.city}%, water ${it.result.pct.water}%`:'- '+it.name+': not analyzed').join('\n');
+  const txt=`TerraGrow Land-Cover Report\n${new Date().toLocaleString()}\nGround resolution: ${gsd()} m/px\n\nAggregate: Farmland ${a.pct.farm}% | Barren ${a.pct.barren}% | City ${a.pct.city}% | Water ${a.pct.water}%\nArea: ${a.totHa} ha total, ${a.underHa} ha underutilised (reclaimable barren)\nPixels: ${a.tot}\n\nPer image:\n`+state.items.map(it=>{ if(!it.result) return '- '+it.name+': not analyzed';
+    const d=detailsOf(it.result);
+    return `- ${it.name} (${it.result.width}x${it.result.height}px, ${d.totalHa} ha): farm ${it.result.pct.farm}% (${d.perClass.farm.ha} ha), barren ${it.result.pct.barren}% (${d.perClass.barren.ha} ha), city ${it.result.pct.city}% (${d.perClass.city.ha} ha), water ${it.result.pct.water}% (${d.perClass.water.ha} ha) | underutilised ${d.underPct}% (~${d.underHa} ha) | score ${d.score}/100 | water ${d.waterStatus} | ${d.advice}`;}).join('\n');
   dl('terragrow-report.txt',txt,'text/plain');
 }
 function dl(name,content,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();}
@@ -256,7 +278,7 @@ $('cfSaveBtn').onclick = async () => {
   try {
     const out = [];
     for (const it of done) {
-      out.push(await cfPost('/api/results', { filename: it.name, percentages: it.result.pct, counts: it.result.counts, pixels: it.result.total, verdict: it.verdict }));
+      out.push(await cfPost('/api/results', { filename: it.name, percentages: it.result.pct, counts: it.result.counts, pixels: it.result.total, verdict: it.verdict, gsd_mpx: gsd(), width: it.result.width, height: it.result.height }));
     }
     cfSay({ saved: out.length, ids: out.map(o => o.id) });
   } catch (e) { cfSay('Save failed: ' + e.message); }

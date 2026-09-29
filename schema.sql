@@ -74,7 +74,10 @@ CREATE TABLE IF NOT EXISTS analyses (
   c_water INTEGER NOT NULL DEFAULT 0,
   pixels INTEGER NOT NULL DEFAULT 0,
   verdict TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  gsd_mpx REAL NOT NULL DEFAULT 0,
+  area_total_ha REAL NOT NULL DEFAULT 0,
+  area_under_ha REAL NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_imagery_farm ON imagery_index(farm_id, captured_at DESC);

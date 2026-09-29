@@ -69,13 +69,38 @@ def verdict(p):
     t = f"Dominant: {names[top]} ({p[top]}%). "
     if p["farm"]>40: t += "Good cultivation potential. "
     if p["barren"]>40: t += "Large barren patch — consider reclamation / irrigation survey. "
+    if p["barren"]>=10: t += f"~{p['barren']}% is barren and potentially reclaimable for crops. "
     if p["city"]>40: t += "Highly urbanized — limited farming scope. "
     if p["water"]>25: t += "Significant water body — check irrigation / drainage. "
     if p["farm"]>=30 and 5<=p["water"]<=30: t += "Farm + water combo ideal for agriculture."
     return t
 
-def analyze_pil(img: Image.Image, max_side=1024):
+def water_status(w):
+    w = float(w)
+    return "deficit" if w < 5 else ("ideal" if w <= 30 else "excess")
+
+def cultivation_score(p):
+    s = (p["farm"] + min(p["water"], 15) * 0.6 - max(0, 5 - p["water"]) * 2
+         - max(0, p["water"] - 30) * 0.6 - p["city"] * 0.1)
+    return round(max(0, min(100, s)), 1)
+
+def area_details(pct, orig_w, orig_h, gsd_m):
+    """Mirror of geo.js detailsFor (minus px passthrough)."""
+    total_ha = round(orig_w * orig_h * gsd_m * gsd_m / 10000, 2) if orig_w > 0 and orig_h > 0 and gsd_m > 0 else 0.0
+    per_ha = {k: round(total_ha * pct[k] / 100, 2) for k in CLASS_NAMES}
+    under_ha = per_ha["barren"]
+    ws = water_status(pct["water"])
+    advice = f"Underutilised (reclaimable barren): {pct['barren']}% (~{under_ha} ha). "
+    if ws == "deficit": advice += "Water deficit (<5%) — yield limited by irrigation. "
+    elif ws == "excess": advice += "Water excess (>30%) — check drainage before sowing. "
+    else: advice += "Water share ideal (5-30%) for most crops. "
+    return {"total_ha": total_ha, "per_class_ha": per_ha,
+            "under_pct": pct["barren"], "under_ha": under_ha,
+            "cultivation_score": cultivation_score(pct), "water_status": ws, "advice": advice}
+
+def analyze_pil(img: Image.Image, max_side=1024, gsd_m=0.0):
     img = img.convert("RGB")
+    orig_w, orig_h = img.size
     s = min(1.0, max_side / max(img.size))
     if s < 1: img = img.resize((round(img.width*s), round(img.height*s)), Image.BILINEAR)
     arr = np.array(img)
@@ -94,8 +119,9 @@ def analyze_pil(img: Image.Image, max_side=1024):
     buf = io.BytesIO(); Image.fromarray(blend).save(buf, format="PNG")
     mask_b64 = base64.b64encode(buf.getvalue()).decode()
     return {"counts":counts,"percentages":pct,"total_pixels":total,
-            "width":img.width,"height":img.height,"engine":engine,
-            "mask_png_base64":mask_b64,"verdict":verdict(pct)}
+            "width":orig_w,"height":orig_h,"engine":engine,
+            "mask_png_base64":mask_b64,"verdict":verdict(pct),
+            "gsd_mpx":gsd_m,"area":area_details(pct, orig_w, orig_h, gsd_m)}
 
 @app.post("/api/analyze")
 def api_analyze():
@@ -105,7 +131,7 @@ def api_analyze():
         img = Image.open(request.files["image"].stream)
     except Exception as e:
         return jsonify({"error":f"bad image: {e}"}), 400
-    out = analyze_pil(img)
+    out = analyze_pil(img, gsd_m=float(request.form.get("gsd_mpx", 0) or 0))
     out["filename"] = request.files["image"].filename
     return jsonify(out)
 
@@ -115,9 +141,10 @@ def api_batch():
     if not files: return jsonify({"error":"send field 'images' (multiple)"}), 400
     results, agg = [], {k:0 for k in CLASS_NAMES}
     tot = 0
+    gsd_m = float(request.form.get("gsd_mpx", 0) or 0)
     for f in files:
         try:
-            o = analyze_pil(Image.open(f.stream)); o["filename"]=f.filename
+            o = analyze_pil(Image.open(f.stream), gsd_m=gsd_m); o["filename"]=f.filename
             for k in agg: agg[k]+=o["counts"][k]
             tot+=o["total_pixels"]; results.append(o)
         except Exception as e:

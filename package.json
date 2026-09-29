@@ -10,11 +10,15 @@
     "db:remote": "wrangler d1 execute terragrow-db --remote --file=./schema.sql",
     "pages": "wrangler pages deploy . --project-name terragrow",
     "tail": "wrangler tail",
-    "test": "node tests/phase12.mjs && node tests/phase3.mjs && node tests/phase5.mjs",
+    "test": "node tests/phase12.mjs && node tests/phase3.mjs && node tests/phase5.mjs && node tests/geo.mjs && node tests/area.mjs",
     "test:load": "node tests/load.mjs",
     "test:p1p2": "node tests/phase12.mjs",
     "test:p3": "node tests/phase3.mjs",
-    "test:p5": "node tests/phase5.mjs"
+    "test:p5": "node tests/phase5.mjs",
+    "test:geo": "node tests/geo.mjs",
+    "test:area": "node tests/area.mjs",
+    "db:migrate-local": "wrangler d1 execute terragrow-db --local --file=./schema-002.sql",
+    "db:migrate-remote": "wrangler d1 execute terragrow-db --remote --file=./schema-002.sql"
   },
   "devDependencies": {
     "wrangler": "^3.90.0"

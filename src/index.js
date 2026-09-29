@@ -50,12 +50,35 @@ function cleanName(name) {
   return (name || "upload.png").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80);
 }
 function pctRow(row) {
+  const p = { farm: row.farm, barren: row.barren, city: row.city, water: row.water };
   return {
     id: row.id, filename: row.filename, r2_key: row.r2_key,
-    percentages: { farm: row.farm, barren: row.barren, city: row.city, water: row.water },
+    percentages: p,
     counts: { farm: row.c_farm, barren: row.c_barren, city: row.c_city, water: row.c_water },
     pixels: row.pixels, verdict: row.verdict, created_at: row.created_at,
+    area: { total_ha: row.area_total_ha ?? 0, under_ha: row.area_under_ha ?? 0, gsd_mpx: row.gsd_mpx ?? 0 },
+    details: detailsPayload(p),
   };
+}
+
+/* Area + underutilised math — mirrors geo.js (frontend). Keep in sync. */
+function areaFor(pct, width, height, gsdM) {
+  const w = Number(width), h = Number(height), g = Number(gsdM);
+  const totalHa = w > 0 && h > 0 && g > 0 ? +((w * h * g * g) / 10000).toFixed(2) : 0;
+  const underHa = +((totalHa * (Number(pct.barren) || 0)) / 100).toFixed(2);
+  return { totalHa, underHa };
+}
+function waterStatusFor(w) {
+  w = Number(w);
+  return w < 5 ? "deficit" : w <= 30 ? "ideal" : "excess";
+}
+function cultivationScoreFor(p) {
+  const s = (p.farm || 0) + Math.min(p.water || 0, 15) * 0.6 - Math.max(0, 5 - (p.water || 0)) * 2
+    - Math.max(0, (p.water || 0) - 30) * 0.6 - (p.city || 0) * 0.1;
+  return +Math.max(0, Math.min(100, s)).toFixed(1);
+}
+function detailsPayload(p) {
+  return { under_pct: +(p.barren || 0), cultivation_score: cultivationScoreFor(p), water_status: waterStatusFor(p.water) };
 }
 
 // ---------- Phase 1 helpers ----------
@@ -121,6 +144,7 @@ function verdictFor(p) {
   let t = `Dominant: ${names[top[0]]} (${top[1]}%). `;
   if (p.farm > 40) t += "Good cultivation potential. ";
   if (p.barren > 40) t += "Large barren patch — consider reclamation / irrigation survey. ";
+  if (p.barren >= 10) t += `~${p.barren}% is barren and potentially reclaimable for crops. `;
   if (p.city > 40) t += "Highly urbanized — limited farming scope. ";
   if (p.water > 25) t += "Significant water body — check irrigation / drainage. ";
   if (p.farm >= 30 && p.water >= 5 && p.water <= 30) t += "Farm + water combo ideal for agriculture.";
@@ -319,7 +343,7 @@ async function analyzePending(env) {
       const msg = `Health score ${health} on ${img.farm_id} is low — inspect field.`;
       alerts.push(await raiseAlert(env, img.farm_id, "low-health", msg, "high"));
     }
-    out.push({ imagery_id: img.id, farm_id: img.farm_id, health_score: health, disease_flag: disease, percentages: p, engine, confidence: conf, alerts });
+    out.push({ imagery_id: img.id, farm_id: img.farm_id, health_score: health, disease_flag: disease, percentages: p, engine, confidence: conf, details: detailsPayload(p), alerts });
   }
   return out;
 }
@@ -404,7 +428,8 @@ export default {
         if (sub === "monitor") {
           const latest = await env.DB.prepare(`SELECT * FROM monitoring_logs WHERE farm_id = ? ORDER BY created_at DESC LIMIT 1`).bind(farmId).first();
           if (!latest) return json({ farm_id: farmId, status: "pending", hint: "POST /internal/analyze after ingest" }, 200);
-          return json({ farm_id: farmId, status: "ok", monitor: latest });
+          return json({ farm_id: farmId, status: "ok", monitor: latest,
+            details: detailsPayload({ farm: latest.farm_pct, barren: latest.barren_pct, city: latest.city_pct, water: latest.water_pct }) });
         }
         if (sub === "alerts") {
           if (search.get("unresolved") === "1") {
@@ -487,12 +512,14 @@ export default {
         if (Math.abs(farm + barren + city + water - 100) > 2) return json({ error: "percentages must sum to ~100" }, 400);
         const id = uid();
         const verdict = String(b.verdict || verdictFor({ farm, barren, city, water })).slice(0, 500);
+        const gsdMpx = Math.max(0, Number(b.gsd_mpx ?? 0) || 0);
+        const area = areaFor({ farm, barren, city, water }, b.width, b.height, gsdMpx);
         await env.DB.prepare(
-          `INSERT INTO analyses (id, filename, r2_key, farm, barren, city, water, c_farm, c_barren, c_city, c_water, pixels, verdict, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO analyses (id, filename, r2_key, farm, barren, city, water, c_farm, c_barren, c_city, c_water, pixels, verdict, created_at, gsd_mpx, area_total_ha, area_under_ha)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).bind(id, String(b.filename || "upload").slice(0, 120), String(b.r2_key || b.farm_id || "").slice(0, 200),
           farm, barren, city, water, Number(c.farm || 0), Number(c.barren || 0), Number(c.city || 0), Number(c.water || 0),
-          Number(b.pixels || b.total_pixels || 0), verdict, nowIso()).run();
+          Number(b.pixels || b.total_pixels || 0), verdict, nowIso(), gsdMpx, area.totalHa, area.underHa).run();
         // If this result belongs to a farm pipeline (r2_key matches an imagery row), auto-promote to monitoring_logs.
         if (b.r2_key) {
           const img = await env.DB.prepare(`SELECT * FROM imagery_index WHERE r2_key = ? LIMIT 1`).bind(String(b.r2_key)).first();
@@ -516,7 +543,7 @@ export default {
             }
           }
         }
-        return json({ ok: true, id, verdict }, 201);
+        return json({ ok: true, id, verdict, area: { total_ha: area.totalHa, under_ha: area.underHa }, details: detailsPayload({ farm, barren, city, water }) }, 201);
       }
       if (pathname === "/api/results" && request.method === "GET") {
         needD1();

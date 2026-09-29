@@ -48,7 +48,7 @@
         <div><i class="dot city"></i>City / Urban <b id="pctCity">—</b></div>
         <div><i class="dot water"></i>Water <b id="pctWater">—</b></div>
       </div>
-      <div class="totals"><span id="imgCount">0 images</span> · <span id="pixCount">0 px</span></div>
+      <div class="totals"><span id="imgCount">0 images</span> · <span id="pixCount">0 px</span> · <span id="haCount">— ha</span></div>
       <div class="export-row">
         <button class="btn small" id="csvBtn">⬇ CSV</button>
         <button class="btn small" id="reportBtn">⬇ Report</button>
@@ -65,6 +65,10 @@
       <span class="chip barren">Barren = browns / tan</span>
       <span class="chip city">City = gray / white / rooftops</span>
       <span class="chip water">Water = blue / teal</span>
+    </div>
+    <div class="scale-row">
+      Ground resolution <input id="gsdInput" type="number" min="0" step="0.1" value="10" /> m/px
+      <span class="note">(Sentinel-2 = 10 · drone ≈ 0.05–0.5 · used for hectare + underutilised-land estimates)</span>
     </div>
   </section>
 
@@ -127,6 +131,7 @@
 </main>
 
 <footer>TerraGrow · farmland · barren · urban · water · built for geospatial advisory</footer>
+<script src="geo.js"></script>
 <script src="analyzer.js"></script>
 </body>
 </html>

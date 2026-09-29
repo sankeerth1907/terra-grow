@@ -42,6 +42,10 @@
 .bars{margin:8px 0}.bar-row{display:grid;grid-template-columns:90px 1fr 52px;gap:8px;align-items:center;font-size:12px;margin:4px 0}
 .bar{height:10px;background:#eee;border-radius:6px;overflow:hidden}.bar i{display:block;height:100%}
 .verdict{font-size:12px;background:#f4f6f0;border-radius:8px;padding:8px;margin-top:6px}
+.details{font-size:12px;background:#eef4fb;border-radius:8px;padding:8px;margin-top:6px;line-height:1.5}
+.details b{color:#1e5b2e}
+.scale-row{margin-top:10px;font-size:13px;color:#4c554a}
+.scale-row input{width:70px;padding:5px 8px;border-radius:8px;border:1px solid #ccc;font-size:13px}
 .card .row{display:flex;gap:8px;margin-top:8px;align-items:center;justify-content:space-between}
 .toggle{font-size:12px}
 .how{background:#fff;border-radius:16px;padding:18px;margin-top:18px}
