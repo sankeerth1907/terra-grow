@@ -541,19 +541,25 @@ async function cfPost(path, body, isForm) {
 }
 const cfFarmId = () => $('farmSelect').value;
 
-$('cfTestBtn').onclick = async () => {
-  setCloudPill('warn', 'Connecting…');
+$('cfTestBtn').onclick = () => connectCloud(false);
+async function connectCloud(silent) {
+  if (!silent) setCloudPill('warn', 'Connecting…');
   try {
     const j = await cfGet('/api/health');
     setCloudPill('ok', `Cloud OK · R2:${j.hasR2 ? 'yes' : 'no'} D1:${j.hasD1 ? 'yes' : 'no'}`);
-    cfSay(j); renderFarm('stats', j);
-    $('fdStep2').open = true;
+    cfSay(j);
+    cfFarmsLoad().catch(() => {});
+    if (!silent) { toast('Connected to the TerraGrow cloud API.'); $('fdStep2').open = true; }
+    return true;
   } catch (e) {
     setCloudPill('', 'Cloud not connected');
-    cfSay('Worker unreachable: ' + e.message);
-    toast('Worker unreachable — run: npm run dev (or check the URL).', 'err');
+    if (!silent) {
+      cfSay('Worker unreachable: ' + e.message);
+      toast('Worker unreachable — run: npm run dev (or check the URL).', 'err');
+    }
+    return false;
   }
-};
+}
 
 // ---- form validation ----
 function validateFarm() {
@@ -787,3 +793,4 @@ $('mapPick').addEventListener('toggle', e => { if (e.target.open) initMap(); });
 // ---------- boot ----------
 render();
 setStep('upload');
+connectCloud(true);
